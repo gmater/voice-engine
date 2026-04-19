@@ -53,11 +53,26 @@ python test_voice_engine_settings.py
 
 ## Publishing to a new repository
 
-1. Copy or clone this directory as the new repo root (or subtree).
-2. Add a **`requirements.txt`** / **`pyproject.toml`** if not already present in your wider project (this folder historically relied on a parent venv).
-3. Keep **`.gitignore`** / **`.cursorignore`** tuned for `venv/`, `__pycache__/`, generated `pslicer_out/`, `pslicer_benchmark_run/`, large `.wav` artifacts, etc.
-4. Do **not** commit secrets (HF tokens, local absolute paths in one-off scripts under `extras/` — edit or parameterize before sharing).
-5. Optional: remove `extras/` entirely if you only want **Voice Engine** (`slicer.py`) + **pslicer** for distribution.
+This directory is a **standalone git repo** (`requirements.txt` for core deps, `.gitignore` for venv and artifacts).
+
+**Create `voice-engine` on GitHub and push** (after [GitHub CLI](https://cli.github.com/) login):
+
+```text
+cd voice_engine
+gh auth login
+gh repo create voice-engine --public --source=. --remote=origin --push
+```
+
+Use `--private` instead of `--public` if you prefer. If the GitHub repo already exists (empty), add the remote and push:
+
+```text
+git remote add origin https://github.com/YOUR_USER/voice-engine.git
+git push -u origin main
+```
+
+Set **`git config user.email`** / **`user.name`** in this repo (or globally) before amending if you do not want the placeholder author on the first commit.
+
+Do **not** commit secrets (HF tokens, etc.). Optional: trim **`extras/`** before publishing if you only want the main app + pslicer.
 
 ## License / attribution
 
