@@ -66,7 +66,7 @@ gh repo create voice-engine --public --source=. --remote=origin --push
 Use `--private` instead of `--public` if you prefer. If the GitHub repo already exists (empty), add the remote and push:
 
 ```text
-git remote add origin https://github.com/YOUR_USER/voice-engine.git
+git remote add origin https://github.com/gmater/voice-engine.git
 git push -u origin main
 ```
 
