@@ -1,0 +1,8 @@
+# Used when running from repo root: streamlit run extras/streamlit_slicer.py
+[theme]
+base = "dark"
+primaryColor = "#00FBFF"
+backgroundColor = "#000000"
+secondaryBackgroundColor = "#141414"
+textColor = "#E8FFF8"
+font = "sans serif"

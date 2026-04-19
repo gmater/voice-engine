@@ -1,0 +1,23 @@
+# Voice Engine — core only (waveform trim, export, playback, pygame preview).
+# Typical footprint: on the order of hundreds of MB (scipy / numba / matplotlib stack),
+# not multi-GB. Does NOT include PyTorch, WhisperX, or CUDA.
+#
+# Fresh small venv (recommended if your current venv picked up CUDA torch ~7 GB):
+#   py -3.12 -m venv venv
+#   .\venv\Scripts\activate
+#   python -m pip install -U pip wheel
+#   python -m pip install --no-cache-dir -r requirements.txt
+#
+# Optional: reclaim pip download cache after installs:
+#   python -m pip cache purge
+#
+# AI trim ("AI trim…" in the app) is OPTIONAL — see requirements-pslicer.txt.
+# pydub uses ffmpeg for non-WAV formats; WAV export works without ffmpeg in PATH.
+
+numpy>=1.24,<3
+scipy>=1.10
+matplotlib>=3.7
+librosa>=0.10.1,<0.12
+soundfile>=0.12.1
+pygame>=2.5
+pydub>=0.25.1

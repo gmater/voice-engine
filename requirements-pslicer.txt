@@ -1,0 +1,36 @@
+# === OPTIONAL: AI trim (WhisperX / pslicer). NOT required for normal Voice Engine use. ===
+#
+# This stack is large. CUDA PyTorch alone is often multi-GB; CPU PyTorch is much smaller
+# (~hundreds of MB) but slower for AI trim.
+#
+# --- Smaller single-venv setup (CPU, recommended if you are disk-constrained) ---
+#   python -m pip install -U pip wheel
+#   python -m pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+#   python -m pip install --no-cache-dir -r requirements-pslicer.txt
+#
+# --- CUDA (only if you need GPU inference; uses much more disk) ---
+#   Install the matching torch / torchvision / torchaudio wheel from:
+#     https://pytorch.org/get-started/locally/
+#   then:
+#   python -m pip install --no-cache-dir -r requirements-pslicer.txt
+#
+# --- "Specialized" CUDA PyTorch (what is / isn't realistic) ---
+# Official pip wheels are already per-CUDA-version (e.g. cu124, cu128): you get one
+# prebuilt stack (CUDA runtime pieces + cuDNN + kernels) for that tag. There is no
+# separate "slim gaming" CUDA wheel from PyTorch — most of the size is libraries
+# WhisperX/pslicer need (cuDNN, BLAS, etc.), not optional fluff you can drop from pip.
+# What *does* save disk: install only ONE cuda build (one venv), never stack cu121+cu128,
+# and use `pip cache purge` after fixing a mistaken CUDA install.
+# Advanced: building PyTorch from source with TORCH_CUDA_ARCH_LIST set to your GPU
+# only (e.g. one compute capability) shrinks binaries but is slow and fragile — rarely
+# worth it for a Voice Engine workstation compared to CPU torch or a second venv.
+#
+# --- Two-venv workflow (smallest day-to-day disk) ---
+#   venv "venv"       → only requirements.txt  (daily trim)
+#   venv "venv_ai"    → CPU torch + this file  (only when using AI trim)
+#   Run slicer with the interpreter that has torch when you need AI trim.
+#
+# whisperx pulls heavy deps; installing CPU torch *first* avoids a default CUDA resolve
+# on many Windows setups when possible.
+
+whisperx

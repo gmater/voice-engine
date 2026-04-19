@@ -1,0 +1,71 @@
+# --- Voice Engine repo (keep venv / caches / heavy trees out of git) ---
+
+# Virtual environments
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+*.egg-info/
+pip-wheel-metadata/
+dist/
+build/
+
+# Local IDE (optional)
+.cursor/
+
+# App outputs / backups
+.sanctum_rolling_backup/
+exports/
+
+# Generated demo / scratch paths
+pslicer_benchmark_run/
+pslicer_demo_out/
+pslicer_out/
+cd/
+
+# Root-level demo media (fixtures live under test_fixtures/)
+/*.wav
+/*.png
+/*.mp4
+
+# Heavy sibling tree (separate tooling)
+TTS-dataset-tools/
+
+# ML artifacts if ever copied into the tree
+*.pt
+*.pth
+*.onnx
+*.bin
+*.safetensors
+*.ckpt
+*.h5
+*.pb
+.cache/
+torch_cache/
+
+# Broad media (keep repo source-only; small WAVs under test_fixtures/ are tracked)
+**/*.flac
+**/*.mp3
+**/*.ogg
+**/*.opus
+**/*.m4a
+**/*.aac
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.webp
+**/*.webm
+**/*.mkv
+
+# OS
+Thumbs.db
+Desktop.ini
+*.swp
+*~

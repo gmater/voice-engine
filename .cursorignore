@@ -1,0 +1,60 @@
+﻿# Python / tooling
+venv/
+.venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+*.egg-info/
+dist/
+build/
+pip-wheel-metadata/
+
+# Local / session outputs (not source)
+.sanctum_rolling_backup/
+pslicer_benchmark_run/
+pslicer_demo_out/
+pslicer_out/
+cd/
+
+# Root-level demo artifacts (paths under ignored dirs are already skipped)
+/*.wav
+/*.png
+/*.mp4
+
+# Common large media under repo (keep small test_fixtures/**/*.wav visible)
+**/*.flac
+**/*.mp3
+**/*.ogg
+**/*.opus
+**/*.m4a
+**/*.aac
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.webp
+**/*.webm
+**/*.mkv
+
+# ML weights & caches (if present under project tree)
+*.pt
+*.pth
+*.onnx
+*.bin
+*.safetensors
+*.ckpt
+*.h5
+*.pb
+.cache/
+torch_cache/
+
+# Heavy third-party trees
+TTS-dataset-tools/
+
+# OS / editor noise
+Thumbs.db
+Desktop.ini
+*.swp
+*~
