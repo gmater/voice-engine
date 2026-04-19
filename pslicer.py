@@ -45,6 +45,8 @@ import warnings
 from pathlib import Path
 from typing import Callable
 
+import wav_metadata as _wav_meta
+
 # WhisperX shells out to ffmpeg; ensure venv Scripts is on PATH on Windows.
 _bindir = os.path.dirname(os.path.abspath(sys.executable))
 os.environ["PATH"] = _bindir + os.pathsep + os.environ.get("PATH", "")
@@ -913,6 +915,10 @@ def export_one_wav_clip(
     t1_sec: float,
     *,
     padding_ms: int = 120,
+    speaker: str = "",
+    transcript: str = "",
+    source_basename: str | None = None,
+    embed_metadata: bool = True,
 ) -> None:
     """
     Write a single padded slice of ``audio_path`` to ``dest_path`` as WAV.
@@ -931,6 +937,18 @@ def export_one_wav_clip(
         if ms1 <= ms0:
             raise ValueError("clip window empty after padding")
         segment[ms0:ms1].export(dest_path, format="wav")
+        if embed_metadata:
+            try:
+                _wav_meta.embed_voice_engine_wav_metadata(
+                    dest_path,
+                    source_audio_basename=source_basename or Path(audio_path).name,
+                    speaker=speaker,
+                    transcript=transcript,
+                    trim_export_start_ms=ms0,
+                    trim_export_end_ms=ms1,
+                )
+            except Exception:
+                pass
     finally:
         del segment
         gc.collect()
@@ -946,6 +964,7 @@ def export_wav_clips(
     verbose: bool = False,
     manifest_path: str | Path | None = None,
     return_source_indices: bool = False,
+    embed_metadata: bool = True,
 ) -> list[str] | tuple[list[str], list[int]]:
     """
     Slice ``audio_path`` (WAV) into clips from (t0, t1, speaker, text) chunks.
@@ -975,6 +994,18 @@ def export_wav_clips(
             fname = f"{stem}_{sort_tok}_auto_{out_idx + 1:04d}_{_sanitize(spk)}.wav"
             dest = os.path.join(out_dir, fname)
             clip.export(dest, format="wav")
+            if embed_metadata:
+                try:
+                    _wav_meta.embed_voice_engine_wav_metadata(
+                        dest,
+                        source_audio_basename=Path(audio_path).name,
+                        speaker=spk,
+                        transcript=text,
+                        trim_export_start_ms=ms0,
+                        trim_export_end_ms=ms1,
+                    )
+                except Exception:
+                    pass
             exported.append(dest)
             source_indices.append(i)
             manifest_chunks.append(

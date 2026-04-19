@@ -3,8 +3,8 @@ Voice Engine — production waveform trimmer (Tk + Matplotlib).
 
 Stack: Tkinter, Matplotlib (SpanSelector), librosa waveshow, pygame, pydub.
 Optional WhisperX auto-trim (pslicer): toolbar “AI trim…” opens a preview window (waveform, timestamps, include/exclude) then exports to the chosen output folder. Hugging Face token: **Settings…** (persisted) or ``HF_TOKEN`` / CLI login.
-Adapts layout for desktop vs touch/remote. Export filename follows the newest .wav in the output
-folder; Output folder picks the directory (path not shown on chrome). Each save backs up any overwritten
+Adapts layout for desktop vs touch/remote. Export writes under a subfolder named after the source WAV
+stem inside the chosen output root; filenames follow hints + trim time. Each save backs up any overwritten
 file as .bak and refreshes Sanctum_moving_backup.wav in that folder.
 Run: python slicer.py  (see requirements.txt for a small venv; AI trim is optional.)
 Optional: python slicer.py "C:\\path\\to\\file.wav"  (load that WAV on startup)
@@ -90,6 +90,8 @@ import pygame
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.widgets import SpanSelector
 from pydub import AudioSegment
+
+from wav_metadata import embed_voice_engine_wav_metadata
 
 _REPO_ROOT = Path(__file__).resolve().parent
 _LEGACY_IN = Path(r"C:\AI\SanctumCore\voice_assets\raw_source\clean")
@@ -301,6 +303,12 @@ def _sanitize_export_filename_text(s: str, max_len: int) -> str:
     s = re.sub(r'[\x00-\x1f<>:"/\\|?*]', "", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s[:max_len].rstrip()
+
+
+def _sanitize_export_subdir_name(stem: str) -> str:
+    """Safe single path segment for per-source export folder under the output root."""
+    s = _sanitize_export_filename_text(stem, 150)
+    return s if s else "untitled"
 
 
 def build_export_filename_from_hints(
@@ -1466,7 +1474,7 @@ class PslicerTrimPreviewDialog:
             return
         j = self._commit_pslicer_trim_times(j, float(t0), float(t1))
         si = self.src_idx[j]
-        t0s, t1s, _, _ = self.chunks[si]
+        t0s, t1s, spk, tx = self.chunks[si]
         try:
             _ps.export_one_wav_clip(
                 self.audio_path,
@@ -1474,6 +1482,8 @@ class PslicerTrimPreviewDialog:
                 t0s,
                 t1s,
                 padding_ms=self.padding_ms,
+                speaker=spk,
+                transcript=tx,
             )
         except Exception as e:
             messagebox.showerror("AI trim", f"Could not save clip:\n{e}", parent=self.top)
@@ -1874,7 +1884,8 @@ class SanctumSurgicalV3:
         self._last_saved_trim_end_ms: int | None = None
         self._ylim_adjust_depth = 0
         self._xlim_cid: int | None = None
-        self.export_dir: str = os.path.abspath(DEFAULT_OUT)
+        self._export_root_dir: str = os.path.abspath(DEFAULT_OUT)
+        self.export_dir: str = self._export_root_dir
 
         self._mixer_initialized = False
         try:
@@ -2915,8 +2926,31 @@ class SanctumSurgicalV3:
         except tk.TclError:
             pass
 
+    def _sync_session_export_dir(self) -> None:
+        """``export_dir`` = output root, or ``<root>/<source stem>/`` when a WAV is loaded."""
+        root = self._export_root_dir
+        ap = (self.audio_path or "").strip()
+        if not ap:
+            self.export_dir = root
+            return
+        try:
+            stem = Path(ap).stem
+        except (OSError, TypeError, ValueError):
+            self.export_dir = root
+            return
+        sub = _sanitize_export_subdir_name(stem)
+        self.export_dir = os.path.join(root, sub)
+        try:
+            os.makedirs(self.export_dir, exist_ok=True)
+        except OSError as e:
+            try:
+                messagebox.showerror("Output folder", str(e), parent=self.root)
+            except tk.TclError:
+                pass
+            self.export_dir = root
+
     def set_export_dir(self, path: str) -> bool:
-        """Set the directory used for Save trim. Creates the folder if needed."""
+        """Set the output *root* directory; session folder follows the loaded source file name."""
         if not path or self._closing:
             return False
         path = os.path.abspath(os.path.normpath(path))
@@ -2928,15 +2962,16 @@ class SanctumSurgicalV3:
             except tk.TclError:
                 pass
             return False
-        self.export_dir = path
+        self._export_root_dir = path
+        self._sync_session_export_dir()
         self._apply_suggested_export_name()
         return True
 
     def choose_export_directory(self):
-        """Pick output folder via dialog (Browse…)."""
+        """Pick output *root* folder via dialog (Browse…); trims go under ``<root>/<source stem>/``."""
         if self._closing:
             return
-        init = self.export_dir
+        init = self._export_root_dir
         if not os.path.isdir(init):
             init = os.path.expanduser("~")
         d = filedialog.askdirectory(
@@ -3845,6 +3880,7 @@ class SanctumSurgicalV3:
             raw = AudioSegment.from_wav(path)
         except Exception as e:
             self.audio_path = ""
+            self._sync_session_export_dir()
             messagebox.showerror("Load failed", f"Could not read WAV:\n{e}", parent=self.root)
             self._empty_plot()
             self._safe_mixer_init()
@@ -3866,6 +3902,7 @@ class SanctumSurgicalV3:
         except pygame.error as e:
             self.audio_path = ""
             self.pydub_audio = None
+            self._sync_session_export_dir()
             messagebox.showerror("Audio engine", f"Pygame could not load audio:\n{e}", parent=self.root)
             self._cleanup_playback_temp()
             self._safe_mixer_init()
@@ -3877,6 +3914,7 @@ class SanctumSurgicalV3:
         except Exception as e:
             self.audio_path = ""
             self.pydub_audio = None
+            self._sync_session_export_dir()
             messagebox.showerror("Analysis failed", f"librosa could not load file:\n{e}", parent=self.root)
             self._cleanup_playback_temp()
             self._safe_mixer_init()
@@ -3884,6 +3922,7 @@ class SanctumSurgicalV3:
             return
 
         self.duration_sec = min(float(len(self._y)) / float(self._sr), len(self.pydub_audio) / 1000.0)
+        self._sync_session_export_dir()
         try:
             self.lbl_file.config(text=os.path.basename(path))
         except tk.TclError:
@@ -4318,6 +4357,9 @@ class SanctumSurgicalV3:
         self._export_busy = True
         self.btn_save.config(state=tk.DISABLED, text="Saving…")
         rolling_path = os.path.join(self.export_dir, ROLLING_BACKUP_BASENAME)
+        src_base = os.path.basename(self.audio_path) if self.audio_path else ""
+        sp_hint = self._export_speaker_hint
+        tx_hint = self._export_transcript_hint
 
         def worker():
             error = None
@@ -4325,6 +4367,17 @@ class SanctumSurgicalV3:
                 if os.path.isfile(out_path):
                     shutil.copy2(out_path, out_path + ".bak")
                 to_export.export(out_path, format="wav")
+                try:
+                    embed_voice_engine_wav_metadata(
+                        out_path,
+                        source_audio_basename=src_base,
+                        speaker=sp_hint,
+                        transcript=tx_hint,
+                        trim_export_start_ms=a,
+                        trim_export_end_ms=b,
+                    )
+                except Exception:
+                    pass
                 try:
                     shutil.copy2(out_path, rolling_path)
                 except OSError:
@@ -4547,9 +4600,14 @@ def _run_stress_harness() -> int:
                 if not app.set_export_dir(out_dir):
                     print("stress_fail set_export_dir", profile, i, flush=True)
                     return 1
+                exp_dir = (
+                    os.path.join(out_dir, _sanitize_export_subdir_name(Path(wav).stem))
+                    if app.audio_path
+                    else out_dir
+                )
                 probe = os.path.join(app.export_dir, "probe.wav")
                 if os.path.normcase(os.path.abspath(os.path.dirname(probe))) != os.path.normcase(
-                    os.path.abspath(app.export_dir)
+                    os.path.abspath(exp_dir)
                 ):
                     print("stress_fail export path join", profile, flush=True)
                     return 1
