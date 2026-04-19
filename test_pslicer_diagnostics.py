@@ -8,10 +8,13 @@ Run:
 from __future__ import annotations
 
 import gc
+import os
 import random
 import sys
+import tempfile
 import tracemalloc
 import unittest
+import wave
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent
@@ -19,6 +22,8 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 import pslicer  # noqa: E402
+import wav_metadata  # noqa: E402
+from pydub.generators import Sine  # noqa: E402
 
 
 def _random_words(rng: random.Random, n: int) -> list[dict]:
@@ -87,11 +92,97 @@ class TestTranscriptTracemalloc(unittest.TestCase):
         )
 
 
+class TestWavMetadataEmbed(unittest.TestCase):
+    def _write_minimal_wav(self, path: str) -> None:
+        seg = Sine(440).to_audio_segment(duration=80).apply_gain(-20)
+        seg.export(path, format="wav")
+
+    def test_embed_voice_engine_many_roundtrips_no_crash(self) -> None:
+        fd, wav = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+        try:
+            self._write_minimal_wav(wav)
+            for i in range(800):
+                wav_metadata.embed_voice_engine_wav_metadata(
+                    wav,
+                    source_audio_basename="source.wav",
+                    speaker="SPEAKER_00",
+                    transcript=f"line {i} " * 12,
+                    trim_export_start_ms=10 + i % 50,
+                    trim_export_end_ms=70 + i % 40,
+                )
+                with wave.open(wav, "rb") as wf:
+                    self.assertGreater(wf.getnframes(), 0)
+        finally:
+            try:
+                os.remove(wav)
+            except OSError:
+                pass
+        gc.collect()
+
+    def test_embed_tracemalloc_growth_bounded(self) -> None:
+        fd, wav = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+        self._write_minimal_wav(wav)
+        try:
+            tracemalloc.stop()
+            tracemalloc.clear_traces()
+            tracemalloc.start(25)
+            for _ in range(200):
+                wav_metadata.embed_voice_engine_wav_metadata(
+                    wav,
+                    source_audio_basename="x.wav",
+                    speaker="A",
+                    transcript="t",
+                    trim_export_start_ms=0,
+                    trim_export_end_ms=50,
+                )
+            gc.collect()
+            s1 = tracemalloc.take_snapshot()
+            for _ in range(5000):
+                wav_metadata.embed_voice_engine_wav_metadata(
+                    wav,
+                    source_audio_basename="y.wav",
+                    speaker="B",
+                    transcript="long " * 400,
+                    trim_export_start_ms=1,
+                    trim_export_end_ms=99,
+                )
+            gc.collect()
+            s2 = tracemalloc.take_snapshot()
+            tracemalloc.stop()
+
+            diffs = s2.compare_to(s1, "lineno")
+            wm_kb = 0.0
+            for d in diffs[:80]:
+                if d.size_diff <= 0:
+                    continue
+                try:
+                    fn = d.traceback[0].filename
+                except IndexError:
+                    continue
+                if Path(fn).name != "wav_metadata.py":
+                    continue
+                wm_kb += d.size_diff / 1024.0
+            self.assertLess(
+                wm_kb,
+                12288.0,
+                f"net tracemalloc growth attributed to wav_metadata.py ~{wm_kb:.1f} KB",
+            )
+        finally:
+            try:
+                os.remove(wav)
+            except OSError:
+                pass
+            gc.collect()
+
+
 def main() -> int:
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
     suite.addTests(loader.loadTestsFromTestCase(TestTranscriptFuzz))
     suite.addTests(loader.loadTestsFromTestCase(TestTranscriptTracemalloc))
+    suite.addTests(loader.loadTestsFromTestCase(TestWavMetadataEmbed))
     return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
 
 

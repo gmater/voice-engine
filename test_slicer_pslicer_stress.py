@@ -301,8 +301,19 @@ class TestPslicerPreviewDialogStress(unittest.TestCase):
             self._pump(root, 8)
             self.assertIsNone(dlg.top)
             self._assert_no_new_sanctum()
-            wavs = [f for f in os.listdir(out) if f.lower().endswith(".wav")]
-            self.assertGreaterEqual(len(wavs), 1)
+            wav_paths: list[str] = []
+            for r, _dirs, files in os.walk(out):
+                for f in files:
+                    if not f.lower().endswith(".wav"):
+                        continue
+                    if slicer.ROLLING_BACKUP_BASENAME.lower() in f.lower():
+                        continue
+                    wav_paths.append(os.path.join(r, f))
+            self.assertGreaterEqual(
+                len(wav_paths),
+                1,
+                f"expected ≥1 exported clip under {out!r}, found {wav_paths!r}",
+            )
         finally:
             shutil.rmtree(out, ignore_errors=True)
             if app is not None:
