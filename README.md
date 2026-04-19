@@ -1,48 +1,179 @@
-# Voice Engine — desktop Tk trimmer & WhisperX pslicer
+# Voice Engine
 
-Python toolkit for **waveform trimming** (desktop Tk app) and **WhisperX-based auto-trim** with optional **speaker diarization**, export to WAV, and GUI preview.
+Voice Engine is a **desktop waveform trimmer** for Windows and Linux: open a WAV, adjust a time range on the waveform, preview, and export trimmed clips. It includes an optional **AI trim** workflow powered by **WhisperX** and the bundled **pslicer** library—automatic sentence-boundary cuts, optional **speaker diarization**, and a preview window before you commit changes.
 
-This layout is suitable for **publishing as its own repository** (copy this folder or use it as a submodule). Paths below assume you are in the repo root (`voice_engine/`).
+The same repository ships **pslicer** as a **command-line** tool for batch auto-trim without the GUI.
 
-## Core layout
+---
 
-| Path | Role |
-|------|------|
-| `slicer.py` | **Voice Engine** — main Tk + Matplotlib trimmer, optional **AI trim…** (pslicer preview). |
-| `pslicer.py` | **Auto-trim library** — WhisperX transcribe/align/diarize, sentence chunks, smart pause merge, CLI + export. |
-| `whisperx_windows_entry.py` | Windows DLL / CUDA helpers for pyannote / WhisperX (imported by the stack). |
-| `test_*.py` | Unit / stress tests (no GPU required for most). |
-| `extras/` | **Optional** scripts — alternate UIs, demos, benchmarks, workspace utilities. See `extras/README.md`. |
+## Features
 
-## Quick start
+- **Manual trim** — Matplotlib span selection, typed start/end times, zoom, playback (pygame).
+- **Export** — WAV to a folder you choose; sensible default filenames (speaker/transcript hints when using AI trim preview).
+- **AI trim (optional)** — Transcribe, align, optional diarization, chunk on sentences/speakers; edit in a list + waveform preview, then apply or export from the dialog.
+- **Settings** — Persisted options (e.g. Hugging Face token path for diarization) via the in-app **Settings…** dialog.
 
-1. **Python 3.10+** (3.12 used in development), **64-bit**, Windows or Linux.
-2. Create a venv and install dependencies for the main GUI: `tkinter` (stdlib), `matplotlib`, `librosa`, `pydub`, `pygame`, `numpy`, etc.
-3. **AI trim** (optional): in the **same venv**, install WhisperX and its stack — `pip install -r requirements-pslicer.txt`. If `torch` fails to resolve, install a CPU/CUDA wheel from [PyTorch Get Started](https://pytorch.org/get-started/locally/) first, then rerun that pip command. Always launch `slicer.py` with that venv’s `python` so `import torch` and `import pslicer` succeed.
-4. **Hugging Face token** for **speaker diarization**: use **Settings…** in the app to paste and save a token (stored under your user profile, e.g. `%LOCALAPPDATA%\VoiceEngine\settings.json` on Windows — applied immediately to `HF_TOKEN` for this process). Alternatively set `HF_TOKEN` / `HUGGING_FACE_HUB_TOKEN`, or `huggingface-cli login`, and accept the **pyannote** model terms (e.g. [speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1)). Environment variables take precedence over the saved file on startup. Without any token, **AI trim** can still run if you choose **Continue without diarization** (sentence cuts + Silero VAD; no multi-speaker labels).
+---
+
+## System requirements
+
+| Item | Notes |
+|------|--------|
+| **OS** | **Windows 10/11** (64-bit) or **Linux** (64-bit). macOS is not a first-class target for this codebase but may work with enough manual dependency work. |
+| **Python** | **3.10 or newer** (3.12 is used in development). **64-bit** interpreter required. |
+| **RAM** | **4 GB** minimum for small WAVs and manual trim only; **8 GB+** recommended. **AI trim** benefits from **16 GB+** when using larger Whisper models. |
+| **Disk** | **Core app** (no PyTorch): typically **hundreds of MB** for the venv after `requirements.txt`. **AI trim** adds **PyTorch + WhisperX** — often **~1–4 GB** with CPU PyTorch, **several GB** with CUDA builds. |
+| **GPU** | **Optional**. AI trim is faster with a **CUDA-capable NVIDIA GPU** and matching PyTorch CUDA wheels; CPU-only installs work but are slower. |
+| **Display** | Any reasonable resolution; layout adapts for narrow or remote-desktop style windows. |
+| **Tkinter** | Usually bundled with the official **python.org** Windows installer (choose *tcl/tk*). On some Linux distros, install the distro **`python3-tk`** (or equivalent) package. |
+| **ffmpeg** | **Not required for pure WAV** load/export in typical use. **pydub** uses **ffmpeg** for many non-WAV formats; install ffmpeg and ensure it is on your **PATH** if you rely on those formats. |
+| **Network** | Required for **first-time model downloads** (WhisperX, pyannote, etc.) and Hugging Face access when using diarization. |
+
+---
+
+## Installation
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/gmater/voice-engine.git
+cd voice-engine
+```
+
+(If your checkout folder is named differently, use that path below instead of `voice-engine`.)
+
+### 2. Create a virtual environment
+
+**Windows (PowerShell):**
+
+```powershell
+py -3.12 -m venv venv
+.\venv\Scripts\Activate.ps1
+python -m pip install -U pip wheel
+```
+
+**Linux:**
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+python -m pip install -U pip wheel
+```
+
+You can also use the helper script **`scripts/recreate_core_venv.ps1`** on Windows to create a venv and install only the core stack.
+
+### 3. Install dependencies
+
+**Core Voice Engine (manual trim + waveform + export)** — recommended baseline:
+
+```bash
+python -m pip install --no-cache-dir -r requirements.txt
+```
+
+**Optional: AI trim (WhisperX / pslicer)** — large install; pick **one** strategy.
+
+- **CPU PyTorch (smaller disk, slower inference):**
+
+  ```bash
+  python -m pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+  python -m pip install --no-cache-dir -r requirements-pslicer.txt
+  ```
+
+- **CUDA PyTorch (GPU):** install the matching **`torch` / `torchvision` / `torchaudio`** wheels for your driver from [PyTorch — Get Started](https://pytorch.org/get-started/locally/), then:
+
+  ```bash
+  python -m pip install --no-cache-dir -r requirements-pslicer.txt
+  ```
+
+See the comment block at the top of **`requirements-pslicer.txt`** for disk-saving tips (single CUDA build, `pip cache purge`, optional second venv for AI only).
+
+### 4. Run the application
+
+```bash
+python slicer.py
+```
+
+Optional: open a file on startup:
+
+```bash
+python slicer.py "C:\path\to\file.wav"
+python slicer.py /home/you/audio/file.wav
+```
+
+---
+
+## How to use
 
 ### Voice Engine (GUI)
 
-```text
-python slicer.py
-python slicer.py "C:\path\to\file.wav"
+1. **Start** the app with `python slicer.py`.
+2. **Open** a WAV via the UI (**Open…** or drag/drop if your build supports it).
+3. **Select** the region to keep using the **highlighted span** on the waveform (drag handles or use the time fields, depending on build).
+4. **Preview** playback if needed.
+5. **Export** — choose output folder and filename, then export; overwritten files may get a `.bak` sibling depending on behavior in your version.
+
+**AI trim…** (optional): requires a Python environment where **`import torch`** and **`import pslicer`** succeed. Configure a **Hugging Face** token under **Settings…** (or set **`HF_TOKEN`** / **`HUGGING_FACE_HUB_TOKEN`**) and accept model terms on the Hub if you want **speaker diarization**; you can still continue **without** diarization when prompted, for sentence-style cuts without multi-speaker labels. See [pyannote speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) for terms links used in typical setups.
+
+**Stress / automated UI test** (developers):
+
+```bash
+python slicer.py --stress
 ```
 
-If the legacy `SanctumCore/voice_assets/…` folders exist on your machine, **Open…** and the initial export folder use those paths; otherwise the app defaults to the repo directory and creates **`exports/`** here for WAV output (you can still pick any folder in the UI).
+### pslicer (CLI)
 
-### pslicer (CLI auto-trim)
+From the repo root with the same venv (including AI dependencies if you use diarization features):
 
-```text
-python pslicer.py recording.wav --out .\exports --model medium
+```bash
+python pslicer.py recording.wav --out ./exports --model medium
+python pslicer.py --help
 ```
 
-Use `python pslicer.py --help` for flags (diarization, pause merge, voice gate, preview, etc.).
+---
+
+## Basic troubleshooting
+
+| Problem | Things to try |
+|---------|----------------|
+| **`No module named 'tkinter'`** (Linux) | Install your distro’s Tk package, e.g. `python3-tk` (Debian/Ubuntu) or `tk` on Fedora. |
+| **`No module named 'torch'`** when using **AI trim** | Install PyTorch (CPU or CUDA) **before** `requirements-pslicer.txt`, then install WhisperX stack; restart the app using **that** venv’s `python`. |
+| **`import pslicer` / WhisperX errors** | Ensure you used **`pip install -r requirements-pslicer.txt`** in the **same** environment; on Windows, **`whisperx_windows_entry.py`** is part of this repo for DLL/CUDA helpers—run from the checkout, not a partial copy. |
+| **ffmpeg errors** when loading non-WAV | Install [ffmpeg](https://ffmpeg.org/) and add it to **PATH**, or convert inputs to WAV first. |
+| **Hugging Face / pyannote access** | Set token in **Settings…** or env vars; accept Hub model conditions; without a token you may still run **without diarization** when the app offers it. |
+| **CUDA out of memory** | Use a **smaller** Whisper model, close other GPU apps, or switch to **CPU** PyTorch for AI trim (slower, less VRAM). |
+| **Huge venv size** | You likely installed **CUDA PyTorch** or multiple stacks. Use **only** `requirements.txt` for manual-only work, or **CPU** torch + one CUDA build in a **dedicated** venv; run **`python -m pip cache purge`** after correcting installs. |
+| **Windows path / spaces** | Prefer quoting paths: `python slicer.py "D:\My Audio\file.wav"`. |
+
+---
+
+## Legal notice
+
+**Copyright and restricted content.** Voice Engine and pslicer are **tools**. What you record, load, transcribe, trim, or export—especially **copyrighted** or otherwise **restricted** material—is **your responsibility**. You must comply with applicable **copyright**, **contract**, **privacy**, and **platform terms** (e.g. streaming services). **The authors do not provide legal advice**; when in doubt, obtain permission or consult a qualified professional.
+
+**Third-party models.** AI features rely on third-party weights and libraries (e.g. **WhisperX**, **pyannote**, **faster-whisper**). Their **licenses and acceptable-use rules** apply in addition to this notice.
+
+---
+
+## Repository layout
+
+| Path | Role |
+|------|------|
+| `slicer.py` | Main **Voice Engine** GUI. |
+| `pslicer.py` | **Auto-trim** library + CLI. |
+| `whisperx_windows_entry.py` | Windows helpers for WhisperX / pyannote integration. |
+| `requirements.txt` | Core dependencies (no PyTorch). |
+| `requirements-pslicer.txt` | Optional **AI trim** stack (`whisperx`). |
+| `scripts/` | Helper scripts (e.g. small venv setup on Windows). |
+| `test_*.py` | Tests. |
+| `extras/` | Optional scripts and demos; see `extras/README.md`. |
+
+---
 
 ## Tests
 
-From repo root, with venv activated:
+With the venv activated:
 
-```text
+```bash
 python test_pslicer_separation.py
 python test_pslicer_preview.py
 python test_pslicer_diagnostics.py
@@ -51,29 +182,21 @@ python test_slicer_pslicer_stress.py
 python test_voice_engine_settings.py
 ```
 
-## Publishing to a new repository
+---
 
-This directory is a **standalone git repo** (`requirements.txt` for core deps, `.gitignore` for venv and artifacts).
+## Publishing / remotes
 
-**Create `voice-engine` on GitHub and push** (after [GitHub CLI](https://cli.github.com/) login):
+This tree is intended as a **standalone git repository**. Example remote:
 
-```text
-cd voice_engine
-gh auth login
-gh repo create voice-engine --public --source=. --remote=origin --push
-```
-
-Use `--private` instead of `--public` if you prefer. If the GitHub repo already exists (empty), add the remote and push:
-
-```text
+```bash
 git remote add origin https://github.com/gmater/voice-engine.git
 git push -u origin main
 ```
 
-Set **`git config user.email`** / **`user.name`** in this repo (or globally) before amending if you do not want the placeholder author on the first commit.
+With [GitHub CLI](https://cli.github.com/): `gh repo create voice-engine --public --source=. --remote=origin --push` (after `gh auth login`). Do **not** commit secrets (tokens, API keys).
 
-Do **not** commit secrets (HF tokens, etc.). Optional: trim **`extras/`** before publishing if you only want the main app + pslicer.
+---
 
 ## License / attribution
 
-Add your own `LICENSE` when publishing; attribute **WhisperX**, **pyannote**, **faster-whisper**, and other upstream licenses as required by your dependency set.
+Add a **`LICENSE`** file suitable for your distribution. Respect upstream licenses for **WhisperX**, **pyannote**, **faster-whisper**, **PyTorch**, and other dependencies you ship or install.
